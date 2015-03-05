@@ -13,6 +13,15 @@ modelData = {
 	              ]
 } ; 
 
+metaTransecs = [{ 
+		"name" : "Transecto1" , 
+		"start" : { "lon" : -95.074951 , "lat" : 27.629033 },
+		"end" : { "lon" : -95.074951 , "lat" : 22.0 } } , 
+	{ 
+		"name" : "Transecto2" , 
+		"start" : { "lon" : -87.074951 , "lat" : 29.629033 },
+		"end" : { "lon" : -87.074951 , "lat" : 22.0 } } ,  	
+	] ; 
 
 /*
  SISPROGOM javascript framework. V3.0
@@ -123,9 +132,11 @@ function initOverlays(map) {
 
  	// Overlay de reticula de lineas lat y lon.
     grid_overlay = new Graticule(map, false);
-    grid_overlay.hide() ; 
 
-	console.log(modelData) ;
+    if (!show_graticule) {
+    	grid_overlay.hide() ; 
+    }
+	
 }
 
 // Div's que flotan dentro del mapa, uno para colormap, y para los graficos de perfiles y transectos.
@@ -158,6 +169,7 @@ function loadModelData(idM) {
 	// Una vez cargada la informacion del modelo en "modelData" crear una instancia de la clase ModelForecast
 	// Se manda llamar la funcion fillControls una vez capturados los metadatos relevantes del modelo. 
 	currentForecast = new ModelForecast(modelData, 0 , fillControls ) ;
+	showTransectMap() ; 
 
 }
 
@@ -173,10 +185,46 @@ function fillControls() {
 
 
 	// Actualizar el grafico.
-	setLayer(this) ; 
+	setLayer(this) ; 	
 
 }
 
+function showTransectMap() { 
+	// iterar el arreglo de datos de metaTransecs
+	for (var td=0; td<metaTransecs.length; td++) {
+
+		// Agregar marcadores en el mapa
+		var pos = new google.maps.LatLng(metaTransecs[td].start.lat, metaTransecs[td].start.lon);
+		var marker = new google.maps.Marker({
+			position: pos,
+			map: map,
+			title:metaTransecs[td].name
+		});
+		var line = [ pos , new google.maps.LatLng(metaTransecs[td].end.lat,metaTransecs[td].end.lon) ] ;
+		var transLine = new google.maps.Polyline({ 
+			path : line , 
+			strokeColor : "#000000" ,
+			strokeOpacity : 0,
+			strokeWeight : 4.0 , 
+			icons: [{
+			    icon: {
+						  path: 'M 0,-1 0,1',
+						  strokeOpacity: 1,
+						  scale: 4 },
+			    offset: '0',
+			    repeat: '20px'
+			  }],
+
+			map : map
+		}) ;
+		
+		google.maps.event.addListener(marker, 'click', function(e) { 
+						
+			currentForecast.lastTimeStep() ;
+
+		}) ;
+	}
+}
 
 function ModelForecast(obj, idx, readyCallb) {
 	this.levels = obj["levels"] ; 
@@ -256,9 +304,18 @@ function ModelForecast(obj, idx, readyCallb) {
  	return this.levels[this.zlevel] ; 
  }
 
- ModelForecast.prototype.setZidx = function(idx, callback) {   	
- 	zlevel = idx ; 
- 	// TODO calcular los nuevos min y max, para la nueva profundidad, recibir una funcion callback.
+ ModelForecast.prototype.setZidx = function(idx) {   
+ 	 	
+ 	if (this.workingVar != 'SSH') {
+ 		this.zlevel = idx ; 
+		// Cargar de nuevo datos de min, max
+	 	// Ahora cargar el min y max
+		getminmax ( this.baseURL , 
+			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getBboxstr() , "callback" : this.readminmax } , 
+			this 
+			);		
+		// Al finalizar se vuelve a llamar la funcion "readycallback" 		
+ 	}
 
  }
 
@@ -306,16 +363,68 @@ ModelForecast.prototype.getTSidx = function() {
  	return this.ctimestep ; 
 }
 
-ModelForecast.prototype.changeVar = function(varName) {
-	if (this.variables.indexOf(varName) != -1)  {
+ModelForecast.prototype.nextTimeStep = function(stepSize) {
+	// Avanzar al siguiente paso de tiempo. 
+
+	if (stepSize == "dates") {		
+		this.cdateFrame = this.cdateFrame + 1 ; 
+		if (this.cdateFrame >= this.dates.length) {
+			this.cdateFrame = 0 ; 
+		}
+	}else {
+		totalSteps = this.dates.length * this.timesteps.length ; 
+		this.ctimestep = this.ctimestep + 1 ;
+		if (this.ctimestep >= this.timesteps.length) { 
+			this.ctimestep = 0 ;
+			this.cdateFrame = this.cdateFrame + 1 ;  
+			if (this.cdateFrame >= this.dates.length) {
+				this.cdateFrame = 0 ; 
+			}
+		}
+	}
+	console.log ("Current timeStep : " + this.getDates()[this.getDidx()] + "T" + this.getTimeSteps()[this.getTSidx()]) ; 	
+
+	// Run the callback function.
+	this.readycallback.call(this) ;
+}
+
+ModelForecast.prototype.lastTimeStep = function(stepSize) {
+	// Regresarl al anterior paso de tiempo. 
+
+	if (stepSize == "dates") {		
+		this.cdateFrame = this.cdateFrame - 1 ; 
+		if (this.cdateFrame < 0 ) {
+			this.cdateFrame = this.dates.length - 1 ; 
+		}
+	}else {		
+		this.ctimestep = this.ctimestep - 1 ;
+		if (this.ctimestep < 0) { 
+			this.ctimestep = this.timesteps.length - 1 ;
+			this.cdateFrame = this.cdateFrame - 1 ;  
+			if (this.cdateFrame < 0) {
+				this.cdateFrame = this.dates.length - 1 ; 
+			}
+		}
+	}
+	console.log ("Current timeStep : " + this.getDates()[this.getDidx()] + "T" + this.getTimeSteps()[this.getTSidx()]) ; 	
+
+	// Run the callback function.
+	this.readycallback.call(this) ;
+}
+
+ModelForecast.prototype.changeVar = function(varName, zlev) {
+	zlev = typeof zlev !== 'undefined' ? zlev : this.zlevel ;
+	if (this.vars.indexOf(varName) != -1)  {
 		this.workingVar = varName ; 
 		if (varName == "SSH") {
 			this.zlevel = 0 ; 
+		} else {
+			this.zlevel = zlev ; 
 		}
 		// Cargar de nuevo datos de min, max
 	 	// Ahora cargar el min y max
 		getminmax ( this.baseURL , 
-			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + this.getTimeSteps()[this.getTSidx()] , "elevation" : caller.getZ() , "bbox" : this.getBboxstr() , "callback" : this.readminmax } , 
+			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + "T" + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getBboxstr() , "callback" : this.readminmax } , 
 			this 
 			);		
 		// Al finalizar se vuelve a llamar la funcion "readycallback"

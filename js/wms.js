@@ -92,7 +92,7 @@ function loadWMSOverlay(map, baseURL, customParams, wmsTileS){
               lLR_Longitude = Math.abs(lLR_Longitude);
             }
             var urlResult = baseURL + wmsParams.join("&") + "&bbox=" + lUL_Longitude + "," + lUL_Latitude + "," + lLR_Longitude + "," + lLR_Latitude;
-            console.log(urlResult) ; 
+            //console.log(urlResult) ; 
 
             return urlResult;
         },
@@ -105,8 +105,20 @@ function loadWMSOverlay(map, baseURL, customParams, wmsTileS){
         isPng: isPng
     };
 
-    overlayWMS = new google.maps.ImageMapType(overlayOptions); 
-    map.overlayMapTypes.insertAt(0, overlayWMS);
+    overlayWMS = new google.maps.ImageMapType(overlayOptions);     
+    map.overlayMapTypes.push(overlayWMS);
+
+    if (map.overlayMapTypes.getLength() > 1) { // Ya habia un overlay antes que el nuevo?
+
+        // TODO Remover el overlay anterior hasta que se haya cargado la nueva.
+        // Por lo pronto solo dejar un pasar unos instantes para eliminar el overlay anterior
+        // y evitar el flasheo de los frames.
+        setTimeout( function() { map.overlayMapTypes.removeAt(0); } , 300 ) ;
+
+    }
+    
+    //map.overlayMapTypes.insertAt(0, overlayWMS);
+
 
     
 }
