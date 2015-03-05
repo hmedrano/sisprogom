@@ -46,7 +46,7 @@ MercatorProjection.prototype.fromDivPixelToLatLng = function(pixel, zoom) {
 };
 
 
-function loadWMS(map, baseURL, customParams, wmsTileS){
+function loadWMSOverlay(map, baseURL, customParams, wmsTileS){
     var tileHeight = 256;
     var tileWidth = 256;
     var opacityLevel = 1.0;
@@ -110,3 +110,5 @@ function loadWMS(map, baseURL, customParams, wmsTileS){
 
     
 }
+
+
