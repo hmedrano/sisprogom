@@ -68,19 +68,14 @@ function initialize() {
     // Registrar funciones de eventos
 
     google.maps.event.addListener(map, 'click', function(e) { 
-    	// position
+    	// google map position
         console.log(e.latLng) ;
-
-        //if (currentForecast instanceof ModelForecast) {
-        //	setPointProfile(getPointProfile(currentForecast, e.latLng) , map) ;
-        //}
-
-
-        // featureInfo TEST 
+        
         // Get map bounds 
         ne = map.getBounds().getNorthEast() ;  // LatLng obj
         sw = map.getBounds().getSouthWest() ;
 
+        // Solicitar informacion de un punto en especifico, con parametros actuales de "currentForecast"
   		getfeatInfo(currentForecast.getWMSUrl() , {
   			"layerName" : currentForecast.getCVar() ,
   			"elevation" : currentForecast.getZ() , 
@@ -92,11 +87,11 @@ function initialize() {
   			"callback" : function(dataxml, caller) { 
   				// Si el valor que regresa este punto es diferente de Nan, recuperar el pointProfile.
   				var val = parseFloat(getElementValue(dataxml, 'value')); 
-  				var lon = parseFloat(getElementValue(dataxml, 'longitude'));
+  				var lon = parseFloat(getElementValue(dataxml, 'longitude')); 
 				var lat = parseFloat(getElementValue(dataxml, 'latitude'));
-				var iIndex = parseInt(getElementValue(dataxml, 'iIndex'));
+				var iIndex = parseInt(getElementValue(dataxml, 'iIndex')); // Indices malla del modelo.
 				var jIndex = parseInt(getElementValue(dataxml, 'jIndex'));
-				var gridCentreLon = parseFloat(getElementValue(dataxml, 'gridCentreLon'));
+				var gridCentreLon = parseFloat(getElementValue(dataxml, 'gridCentreLon'));  // lat , lon del modelo.
 				var gridCentreLat = parseFloat(getElementValue(dataxml, 'gridCentreLat'));
 
 				if (lon) {
@@ -126,10 +121,9 @@ function initOverlays(map) {
     var neBound = new google.maps.LatLng(30.54087, -81.0);
     var bounds = new google.maps.LatLngBounds(swBound, neBound);    
 
- 	// GRid overlay
+ 	// Overlay de reticula de lineas lat y lon.
     grid_overlay = new Graticule(map, false);
-    grid_overlay.hide() ;
-
+    grid_overlay.hide() ; 
 
 	console.log(modelData) ;
 }
@@ -158,7 +152,7 @@ function initHolders() {
 
 
 function loadModelData(idM) {
-	// TODO Cargar con ajax, datos del modelo
+	// TODO Cargar con ajax, datos del modelo en "modelData"
 
 
 	// Una vez cargada la informacion del modelo en "modelData" crear una instancia de la clase ModelForecast
@@ -167,17 +161,18 @@ function loadModelData(idM) {
 
 }
 
-// Callback function..
+// Callback function.
 function fillControls() {
 
 	// TODO Llenar la informacion de los controles de fecha, los metodos son
-	// this.getDates regresa un arreglo con las fechas en las que hay datos.
+	// this.getDates() regresa un arreglo con las fechas en las que hay datos. 
+	// this.getTimeSteps() regresa el arreglo con las horas en los que hay datos.
 
 
-	console.log(this) ;
+	console.log(this) ;   // Para explorar la instancia de la clase ModelForecast.
 
 
-	// llenar el primer grafico por default. 
+	// Actualizar el grafico.
 	setLayer(this) ; 
 
 }
@@ -309,6 +304,22 @@ ModelForecast.prototype.getDidx = function() {
 
 ModelForecast.prototype.getTSidx = function() {
  	return this.ctimestep ; 
+}
+
+ModelForecast.prototype.changeVar = function(varName) {
+	if (this.variables.indexOf(varName) != -1)  {
+		this.workingVar = varName ; 
+		if (varName == "SSH") {
+			this.zlevel = 0 ; 
+		}
+		// Cargar de nuevo datos de min, max
+	 	// Ahora cargar el min y max
+		getminmax ( this.baseURL , 
+			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + this.getTimeSteps()[this.getTSidx()] , "elevation" : caller.getZ() , "bbox" : this.getBboxstr() , "callback" : this.readminmax } , 
+			this 
+			);		
+		// Al finalizar se vuelve a llamar la funcion "readycallback"
+	}  	
 }
 
 
