@@ -113,3 +113,10 @@ Regresa xml
    <value>22.546618</value>
   </FeatureInfo>
 </FeatureInfoResponse>
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+"GetTransect"
+
+http://cic-pem.cicese.mx:8080/thredds/wms/cdmdata/MODELOScdm/CIRCULACION/ROMS_RUTGERS/FORECAST_ROMSRUTGERS_GOLFOMEXICO_20150227.nc?REQUEST=GetTransect&LAYER=TEMPERATURE&CRS=EPSG:4326&ELEVATION=-2&TIME=2015-03-04T00:00:00.000Z&LINESTRING=-93.952825546265%2027.702106857301,-94.064882087707%2021.202827453614&FORMAT=image/png&COLORSCALERANGE=-5.15,34.85&NUMCOLORBANDS=20&LOGSCALE=false&PALETTE=rainbow&VERSION=1.1.1
+

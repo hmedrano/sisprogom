@@ -14,11 +14,11 @@ modelData = {
 } ; 
 
 metaTransecs = [{ 
-		"name" : "Transecto1" , 
+		"name" : "Seccion ejemplo uno" , 
 		"start" : { "lon" : -95.074951 , "lat" : 27.629033 },
 		"end" : { "lon" : -95.074951 , "lat" : 22.0 } } , 
 	{ 
-		"name" : "Transecto2" , 
+		"name" : "Seccion ejemplo dos" , 
 		"start" : { "lon" : -87.074951 , "lat" : 29.629033 },
 		"end" : { "lon" : -87.074951 , "lat" : 22.0 } } ,  	
 	] ; 
@@ -36,6 +36,7 @@ var workingRemote = true ;
 // google map object
 var map ;
 var currentForecast ;
+var requestedSections ; 
 
 // Plot appearance
 var defaultModel = "ROMSRutgers" ; 
@@ -76,6 +77,7 @@ function initialize() {
 
     // Registrar funciones de eventos
 
+    // Al hacer click en el mapa solicitar informacion del punto, y si es posible generar un grafico del perfil
     google.maps.event.addListener(map, 'click', function(e) { 
     	// google map position
         console.log(e.latLng) ;
@@ -159,6 +161,15 @@ function initHolders() {
 	$("#pplotholder").css({top: ( mrgTop -clbHeight  ) +  "px"}) ;	
 	$("#pplotholder").hide() ; 	
 
+	// TransectPlot holder.
+	$("<div id='tplotholder' class='tplot-drag'></div>").appendTo('#map-canvas').draggable({containment: "#map-canvas", scroll: false}) ; 
+	ppWidth = parseInt(findCSSProperty(".tplot-drag","width")) ; 
+	ppHeight = parseInt(findCSSProperty(".tplot-drag","height")) ; 
+	mrgTop = 10 ; 	
+	$("#tplotholder").css({left: ($("#map-canvas").width() - ppWidth - mrgLeft) +  "px"}) ;
+	$("#tplotholder").css({top: ( mrgTop - clbHeight  ) +  "px"}) ;	
+	$("#tplotholder").hide() ; 		
+
 }
 
 
@@ -169,7 +180,7 @@ function loadModelData(idM) {
 	// Una vez cargada la informacion del modelo en "modelData" crear una instancia de la clase ModelForecast
 	// Se manda llamar la funcion fillControls una vez capturados los metadatos relevantes del modelo. 
 	currentForecast = new ModelForecast(modelData, 0 , fillControls ) ;
-	showTransectMap() ; 
+	requestedSections = new Sections(metaTransecs) ;
 
 }
 
@@ -185,46 +196,11 @@ function fillControls() {
 
 
 	// Actualizar el grafico.
+	this.setHTMLReport() ;
 	setLayer(this) ; 	
 
 }
 
-function showTransectMap() { 
-	// iterar el arreglo de datos de metaTransecs
-	for (var td=0; td<metaTransecs.length; td++) {
-
-		// Agregar marcadores en el mapa
-		var pos = new google.maps.LatLng(metaTransecs[td].start.lat, metaTransecs[td].start.lon);
-		var marker = new google.maps.Marker({
-			position: pos,
-			map: map,
-			title:metaTransecs[td].name
-		});
-		var line = [ pos , new google.maps.LatLng(metaTransecs[td].end.lat,metaTransecs[td].end.lon) ] ;
-		var transLine = new google.maps.Polyline({ 
-			path : line , 
-			strokeColor : "#000000" ,
-			strokeOpacity : 0,
-			strokeWeight : 4.0 , 
-			icons: [{
-			    icon: {
-						  path: 'M 0,-1 0,1',
-						  strokeOpacity: 1,
-						  scale: 4 },
-			    offset: '0',
-			    repeat: '20px'
-			  }],
-
-			map : map
-		}) ;
-		
-		google.maps.event.addListener(marker, 'click', function(e) { 
-						
-			currentForecast.lastTimeStep() ;
-
-		}) ;
-	}
-}
 
 function ModelForecast(obj, idx, readyCallb) {
 	this.levels = obj["levels"] ; 
@@ -297,7 +273,7 @@ function ModelForecast(obj, idx, readyCallb) {
  }
 
  ModelForecast.prototype.getZidx = function() { 
- 	return zlevel ; 
+ 	return this.zlevel ; 
  }
 
  ModelForecast.prototype.getZ = function() { 
@@ -311,7 +287,7 @@ function ModelForecast(obj, idx, readyCallb) {
 		// Cargar de nuevo datos de min, max
 	 	// Ahora cargar el min y max
 		getminmax ( this.baseURL , 
-			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getBboxstr() , "callback" : this.readminmax } , 
+			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getMapbbox() , "callback" : this.readminmax } , 
 			this 
 			);		
 		// Al finalizar se vuelve a llamar la funcion "readycallback" 		
@@ -424,12 +400,101 @@ ModelForecast.prototype.changeVar = function(varName, zlev) {
 		// Cargar de nuevo datos de min, max
 	 	// Ahora cargar el min y max
 		getminmax ( this.baseURL , 
-			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + "T" + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getBboxstr() , "callback" : this.readminmax } , 
+			{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + "T" + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getMapbbox() , "callback" : this.readminmax } , 
 			this 
 			);		
 		// Al finalizar se vuelve a llamar la funcion "readycallback"
 	}  	
 }
+
+ModelForecast.prototype.reCalculateMM = function() {
+ 	// Ahora cargar el min y max
+	getminmax ( this.baseURL , 
+		{"layerName" : this.workingVar , "time" : this.getDates()[this.getDidx()] + this.getTimeSteps()[this.getTSidx()] , "elevation" : this.getZ() , "bbox" : this.getMapbbox() , "callback" : this.readminmax } , 
+		this );		
+}
+
+ModelForecast.prototype.getMapbbox = function() {
+    // Get map bounds 
+    ne = map.getBounds().getNorthEast() ;  // LatLng obj
+    sw = map.getBounds().getSouthWest() ;	
+    return "" + sw.lng() + "," + sw.lat() + "," + ne.lng() + "," + ne.lat() ; 
+}
+
+ModelForecast.prototype.setHTMLReport = function() {
+    // 
+    htmlSTR = "Variable : " + this.getCVar() + "<br>" ;
+    htmlSTR = htmlSTR + "Profundidad : " + this.getZ() + " metros <br>" ;
+    htmlSTR = htmlSTR + "Dia : " + this.getDates()[this.getDidx()] + "  <br> Hora : " + this.getTimeSteps()[this.getTSidx()]  + "<br>" ;
+
+    $("#statusInfo").empty() ;
+    $("#statusInfo").append(htmlSTR) ;
+}
+
+/* --- Final Clase ModelForecast --- */ 
+
+// 
+// Clase Sections que se encargara de mostrar las lineas de los transectos y sus eventos.
+function Sections(obj) {
+	this.sections = obj ;
+	this.secMarkers = [] ; 
+	this.secLines = [] ; 
+}
+
+Sections.prototype.showSections = function() {
+	if (this.secMarkers.length == 0) {
+		for (var td=0; td<this.sections.length; td++) {
+
+			// Agregar marcadores en el mapa
+			var pos = new google.maps.LatLng(metaTransecs[td].start.lat, metaTransecs[td].start.lon);
+			var marker = new google.maps.Marker({
+				position: pos,
+				map: map,
+				title:metaTransecs[td].name,
+				secID : td
+			});
+			this.secMarkers.push(marker) ; 
+
+			var line = [ pos , new google.maps.LatLng(metaTransecs[td].end.lat,metaTransecs[td].end.lon) ] ;
+			var transLine = new google.maps.Polyline({ 
+				path : line , 
+				strokeColor : "#000000" ,
+				strokeOpacity : 0,
+				strokeWeight : 4.0 , 
+				icons: [{
+				    icon: {
+							  path: 'M 0,-1 0,1',
+							  strokeOpacity: 1,
+							  scale: 4 },
+				    offset: '0',
+				    repeat: '20px'
+				  }],
+
+				map : map
+			}) ;
+			this.secLines.push(transLine) ;
+			
+			google.maps.event.addListener(marker, 'click', function(e) { 						
+				
+				setSectionPlot(getTransect(currentForecast, requestedSections.sections[this.secID]["start"], requestedSections.sections[this.secID]["end"]) , requestedSections.sections[this.secID]["name"] , map)
+
+			}) ;
+		}
+	}
+}
+
+Sections.prototype.hideSections = function() {
+	for (var td=0; td<this.secMarkers.length; td++) {	
+		this.secMarkers[td].setMap(null) ;
+		this.secLines[td].setMap(null) ;
+	}
+	this.secMarkers = [] ;
+	this.secLines = [] ; 
+}
+
+
+
+
 
 
 
@@ -518,6 +583,42 @@ function setPointProfile(cmimgSrc , slabel , map) {
 	
 }
 
+function getTransect(obj, start, end) {
+	 baseURL = obj.getWMSUrl() + "?" ; 
+	 customParams = [
+	  "LAYER=" + obj.getCVar() ,	
+	  "ELEVATION=-" + obj.getZ(),  
+	  "REQUEST=GetTransect", 	  
+	  "FORMAT=image/png" ,
+	  "CRS=EPSG:4326",
+	  "TIME=" + obj.getDates()[obj.getDidx()] + "T" + obj.getTimeSteps()[obj.getTSidx()],
+	  "PALETTE=rainbow",
+	  "COLORSCALERANGE=" + obj.getMin() + "," + obj.getMax(),
+	  "NUMCOLORBANDS=" + WMSColorbands,
+	  "LINESTRING=" + start["lon"] + "%20" + start["lat"] + "," + end["lon"] + "%20" + end["lat"]
+	 ] ; 
+
+	 console.log(baseURL + customParams.join("&")) ; 
+	 return baseURL + customParams.join("&") ;  	
+}
+
+function setSectionPlot(cmimgSrc , slabel , map) {
+
+	$("#tplotholder").empty() ; 
+	$("#tplotholder").append("<span id='sectioninfo'>" + slabel + "</span>") ;
+	$("#tplotholder").append("<center><img id='tloaderimg' src='loader.gif'><center>") ; 
+	$("#tplotholder").append('<img id="wmstp" src="' + cmimgSrc + '">') ; 
+	$("#wmstp").hide() ; 	
+
+	// TODO show with an fade in animation
+	$("#tplotholder").show() ; 	
+
+	$("#wmstp").on('load' , function() {
+		$("#tloaderimg").hide() ; 
+		$("#wmstp").show() ; 
+	}) ;
+	
+}
 
 /* 
  Metadata requests.. In server only

@@ -24,9 +24,29 @@
 <body>
 
 
-<div id="header"></div>
+<div id="header" class="header-wave"><img class="logo-header" alt="Pemex.com" src="resources/logo_pmx.png"><img class="logo-header" alt="Cicese.com" src="resources/logo_cicese.png"> <div class="apptitle"><h3>PROTOTIPO WEB VISUALIZACION </h3></div></div>
 <div id="content">
-  <div id="dataholder"></div>
+  <div id="dataholder">
+
+    <!-- Temporally Testing controls - Begin-->     
+     <button type="button" onclick="currentForecast.nextTimeStep()">Next</button> 
+     <button type="button" onclick="currentForecast.lastTimeStep()">Last</button> 
+      <br>
+     <button type="button" onclick="currentForecast.setZidx(currentForecast.getZidx() + 1)">Depth</button> 
+     <button type="button" onclick="currentForecast.changeVar('TEMPERATURE')">TEMP</button> 
+     <button type="button" onclick="currentForecast.changeVar('SALINITY')">SAL</button> 
+     <button type="button" onclick="currentForecast.changeVar('SSH')">SSH</button> 
+     <button type="button" onclick="currentForecast.changeVar('sea_water_velocity')">CURRENTS</button> 
+      <br>
+     <button type="button" onclick="currentForecast.reCalculateMM()">Recalcular escala</button> 
+     <button type="button" onclick="requestedSections.showSections()">Mostrar secciones</button> 
+     <button type="button" onclick="requestedSections.hideSections()">Ocultar secciones</button> 
+      <br><br>
+     <div id="statusInfo" style="margin-left: 5px;"></div>
+    <!-- Temporally Testing controls - End -->     
+
+
+  </div>
   <div id="map-canvas"></div>
 </div>
 
