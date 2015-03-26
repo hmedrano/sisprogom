@@ -37,6 +37,7 @@ var workingRemote = true ;
 var map ;
 var currentForecast ;
 var requestedSections ; 
+var infowindow ; 
 
 // Plot appearance
 var defaultModel = "ROMSRutgers" ; 
@@ -77,8 +78,20 @@ function initialize() {
 
     // Registrar funciones de eventos
 
+
     // Al hacer click en el mapa solicitar informacion del punto, y si es posible generar un grafico del perfil
-    google.maps.event.addListener(map, 'click', function(e) { 
+    google.maps.event.addListener(map, 'click', onClickMapBox ) ; 
+
+    // Al mover el mouse, actualizar la posicion.
+    google.maps.event.addListener(map, 'mousemove', onMouseMoveUpdatePos );
+
+    // Al cambiar de tamano el mapa., resize window
+    $( window ).resize( onWindowResize );
+
+
+
+    /*
+    function(e) { 
     	// google map position
         console.log(e.latLng) ;
         
@@ -113,16 +126,197 @@ function initialize() {
 					}
 				}
 
-  				//console.log(dataxml) ; 
+  				console.log(dataxml) ; 
   			}
   		}, null ) ;
-
-
-
     });
+	*/
 
     
 }
+
+/* ON MOVE, ON CLICK Events */
+
+function onWindowResize() {
+	mrgLeft = 15 ; 	mrgBottom = 25 ;
+	
+	if ($("#positionInfo").length) {
+ 		$("#positionInfo").css( { left: mrgLeft + "px"}) ;
+		$("#positionInfo").css( { top: ( $("#map-canvas").height() - 50 - mrgBottom) + "px" }) ; 	
+	}
+
+}
+
+function onMouseMoveUpdatePos(obj) {
+	// Mostrar las coordenadas donde pasa el mouse.
+	var lat = obj.latLng.lat();
+    lat = lat.toFixed(4);
+    var lng = obj.latLng.lng();
+    lng = lng.toFixed(4);	
+	$("#positiontb").empty() ; 
+	$("#positiontb").append('' + lng + ' , ' + lat) ; 
+}
+
+/* Funcion que dibujara una ventana de informacion, 
+   describiendo el punto seleccionado, su valor y los graficos que se ofrecen para ese punto.
+*/
+function onClickMapBox(obj) { 
+
+	// Consultar informacion sobre este punto (obj)  ---- 
+	// Google map bounds visibles.
+	ne = map.getBounds().getNorthEast() ; 
+    sw = map.getBounds().getSouthWest() ;
+	var latgm = obj.latLng.lat(); latgm = latgm.toFixed(4);
+    var lnggm = obj.latLng.lng(); lnggm = lnggm.toFixed(4);	    
+	// Solicitar informacion de un punto en especifico, con parametros actuales de "currentForecast"
+	getfeatInfo(currentForecast.getWMSUrl() , {
+		"layerName" : currentForecast.getCVar() ,
+		"elevation" : currentForecast.getZ() , 
+		"x" : obj.pixel.x , "y" : obj.pixel.y ,
+		"bbox" : "" + sw.lng() + "," + sw.lat() + "," + ne.lng() + "," + ne.lat() , 
+		"width" : map.getDiv().offsetWidth ,
+		"height" : map.getDiv().offsetHeight, 
+		"time" : currentForecast.getDates()[currentForecast.getDidx()] + "T" + currentForecast.getTimeSteps()[currentForecast.getTSidx()] , 
+		"callback" : function(dataxml, caller) { 
+			// TIP. Si el valor que regresa este punto es diferente de Nan, entonces hay informacion valida.
+			// Informacion recuperada.
+			var val = parseFloat(getElementValue(dataxml, 'value')); 
+			var lon = parseFloat(getElementValue(dataxml, 'longitude'));  
+			var lat = parseFloat(getElementValue(dataxml, 'latitude'));
+			var iIndex = parseInt(getElementValue(dataxml, 'iIndex'));   // Indices malla del modelo.
+			var jIndex = parseInt(getElementValue(dataxml, 'jIndex'));
+			var gridCentreLon = parseFloat(getElementValue(dataxml, 'gridCentreLon'));  // lat , lon del modelo.
+			var gridCentreLat = parseFloat(getElementValue(dataxml, 'gridCentreLat'));  
+
+			// Si hay datos validos entonces... 	
+			if (val) {   			 
+
+				// Formatear contenido para el info window. 
+				headertxt = '<p><strong>Coordenadas: </strong> ' + lnggm + 'E , ' + latgm + 'N ' + '<br><strong>Valor: </strong> ' + val.toFixed(4) + '</p>'; 
+				bodytxt = '<p><strong>Graficos disponibles:</strong></p><ul>' ; 
+				if (currentForecast.getCVar() != 'SSH') {
+					bodytxt = bodytxt + '<li id="pprofile"><a href="#">Perfil del punto</a></li><li id="ptimeseries">Serie de tiempo del punto</li>' ;
+				} else {
+					bodytxt = bodytxt + '<li>Serie de tiempo del punto</li>' ;
+				}				
+				if (currentForecast.getCVar() == 'sea_water_velocity') {
+					bodytxt = bodytxt + '<li id="directionrose">Rosa de direcciones</li>' ;
+				}
+				bodytxt = bodytxt + '</ul>' ; 
+				contentString = headertxt + bodytxt ; 
+				// remove any other infowindow
+				if (typeof infowindow != 'undefined') {
+					infowindow.close() ;
+				}
+				// The info window
+				infowindow = new google.maps.InfoWindow({
+			      content: contentString,
+			      position: obj.latLng
+			  	});
+			  	
+			  	infowindow.open(map) ;  
+
+			  	google.maps.event.addListener(infowindow, 'domready' , function() {
+					// Accion para point profile. 
+					$("#pprofile").click( function() {
+						console.log('Onclick pprofile') ; 
+						pptitle = "<p><h5><strong>Perfil de:</strong> " + currentForecast.getCVar() + "&nbsp;&nbsp;&nbsp;<strong>Punto:</strong> " + lnggm + "E" + " , " + latgm + "</h5></p><p><h5><strong>Fecha-tiempo:</strong> " + currentForecast.getCurrentDatetimeString() + "</h5></p>" ; 
+						setPointProfile(getPointProfile(currentForecast, obj.latLng) , pptitle, map) 
+					}); 			  		
+			  	}) ;
+		  	
+			} 
+			
+		}
+	}, null ) ;		
+
+
+
+
+}
+
+function clickOnMap(obj) { 
+
+	// Google map bounds
+	ne = map.getBounds().getNorthEast() ; 
+    sw = map.getBounds().getSouthWest() ;
+	// Solicitar informacion de un punto en especifico, con parametros actuales de "currentForecast"
+	getfeatInfo(currentForecast.getWMSUrl() , {
+		"layerName" : currentForecast.getCVar() ,
+		"elevation" : currentForecast.getZ() , 
+		"x" : obj.pixel.x , "y" : obj.pixel.y ,
+		"bbox" : "" + sw.lng() + "," + sw.lat() + "," + ne.lng() + "," + ne.lat() , 
+		"width" : map.getDiv().offsetWidth ,
+		"height" : map.getDiv().offsetHeight, 
+		"time" : currentForecast.getDates()[currentForecast.getDidx()] + "T" + currentForecast.getTimeSteps()[currentForecast.getTSidx()] , 
+		"callback" : function(dataxml, caller) { 
+			// Si el valor que regresa este punto es diferente de Nan, recuperar el pointProfile.
+			var val = parseFloat(getElementValue(dataxml, 'value')); 
+			var lon = parseFloat(getElementValue(dataxml, 'longitude')); 
+			var lat = parseFloat(getElementValue(dataxml, 'latitude'));
+			var iIndex = parseInt(getElementValue(dataxml, 'iIndex')); // Indices malla del modelo.
+			var jIndex = parseInt(getElementValue(dataxml, 'jIndex'));
+			var gridCentreLon = parseFloat(getElementValue(dataxml, 'gridCentreLon'));  // lat , lon del modelo.
+			var gridCentreLat = parseFloat(getElementValue(dataxml, 'gridCentreLat'));
+
+			if (lon) {
+
+				// Obtener U y V de este dataset y calcular la magnitud y direccion.  
+				// Slice : [ : ] [ Z ] [ iIndex ] [ jIndex ]
+				dapUrl = sDodsUrlBuilder(currentForecast.getDAPUrl() , [ 'UCOMP_X', 'VCOMP_Y'] , [ [ 0 , currentForecast.getTimeDimSize() ] , [ currentForecast.getZidx() ] , [ jIndex ] , [ iIndex ] ] ) ; 
+				console.log('DAP Petition : ' + dapUrl ) ; 
+
+				getDapData(dapUrl , function(data) {
+
+					// Now flatten the arrays
+					uArray = [] ; 
+					vArray = [] ;
+					magA = [] ; 
+					dirA = [] ; 											
+					uArray = flattenMArray (data['UCOMP_X'].data, uArray) ; 
+					vArray = flattenMArray (data['VCOMP_Y'].data, vArray) ; 
+
+					for (var i =0; i< uArray.length ; i++) {
+						magA.push(Math.sqrt( Math.pow(uArray[i],2) + Math.pow(vArray[i],2) ) ) ;  						
+						// Direccion en grados 0 a 359 
+						if (vArray[i] == 0) {
+							dirA.push(180.0) ;
+						} else { 
+							// East 0 degress , North 90 dg , West 180 dg   South 270 dg
+							dirval = Math.atan2(vArray[i] , uArray[i]) * (180.0 / Math.PI) ; 
+							if (dirval < 0) {
+								dirval = ( 180 - Math.abs(dirval) ) + 180.0 ; 
+							}
+							dirA.push( dirval ) ;
+						}						
+					}
+
+					console.log(magA) ;
+					console.log(dirA) ;
+					console.log(val.toPrecision(4)) ; // magnitud
+
+					// Crear rosa de viento de todo el periodo.
+					title = "Rosa de direccion " +  lon.toFixed(3) + "E" + " , " + lat.toFixed(3) + "  Valor: " + val.toPrecision(4) ;  
+					setDirectionRose(title,map,magA, dirA) ; 
+
+				}) ;
+
+				// Codigo para obtener el pointProfile de un punto.
+				/* 
+				var truncVal = val.toPrecision(4); 
+				if (!isNaN(truncVal)) { 
+					titleStr = "Posicion : " + lon.toFixed(3) + "E" + " , " + lat.toFixed(3) + "  Valor: " + truncVal ;  
+					setPointProfile(getPointProfile(currentForecast, e.latLng) , titleStr , map) ;
+				} 
+				*/
+			}
+
+			console.log(dataxml) ; 
+		}
+	}, null ) ;	
+
+} 
+
 
 // 
 function initOverlays(map) {
@@ -153,7 +347,7 @@ function initHolders() {
 	$("#colormapholder").hide() ; 
 
 	// ProfilePlot holder.
-	$("<div id='pplotholder' class='pplot-drag'></div>").appendTo('#map-canvas').draggable({containment: "#map-canvas", scroll: false}) ; 
+	$("<div id='pplotholder' class='pplot-drag panel panel-default'></div>").appendTo('#map-canvas').draggable({containment: "#map-canvas", scroll: false}) ; 
 	ppWidth = parseInt(findCSSProperty(".pplot-drag","width")) ; 
 	ppHeight = parseInt(findCSSProperty(".pplot-drag","height")) ; 
 	mrgTop = 10 ; 	
@@ -169,6 +363,24 @@ function initHolders() {
 	$("#tplotholder").css({left: ($("#map-canvas").width() - ppWidth - mrgLeft) +  "px"}) ;
 	$("#tplotholder").css({top: ( mrgTop - clbHeight  ) +  "px"}) ;	
 	$("#tplotholder").hide() ; 		
+
+	// Rosas de direccion holder.
+	$("<div id='dirplotholder' class='dirplot-drag'></div>").appendTo('#map-canvas').draggable({containment: "#map-canvas", scroll: false}) ; 
+	ppWidth = parseInt(findCSSProperty(".dirplot-drag","width")) ; 
+	ppHeight = parseInt(findCSSProperty(".dirplot-drag","height")) ; 
+	mrgTop = 10 ; 	
+	$("#dirplotholder").css({left: ($("#map-canvas").width() - ppWidth - mrgLeft) +  "px"}) ;
+	$("#dirplotholder").css({top: ( mrgTop - clbHeight  ) +  "px"}) ;	
+	$("#dirplotholder").hide() ; 		
+
+	// Control de posicion (Lon, lat) 
+	$("<div id='positionInfo' class='posInfo panel'></div>").appendTo('#map-canvas') ;   
+	ppHeight = parseInt(findCSSProperty(".posInfo","height")) ; 
+	$("#positionInfo").css({left: mrgLeft + "px"}) ;
+	$("#positionInfo").css({top: ($("#map-canvas").height() - ppHeight - mrgBottom) +  "px" }) ; 
+	$("#positionInfo").append('<center><span>Longitude, Latitude.</span></center><div id="positiontb" style="text-align: center;"></div>') ;
+	$("#positionInfo").hide() ; 
+
 
 }
 
@@ -192,12 +404,14 @@ function fillControls() {
 	// this.getTimeSteps() regresa el arreglo con las horas en los que hay datos.
 
 
-	console.log(this) ;   // Para explorar la instancia de la clase ModelForecast.
+	//console.log(this) ;   // Para explorar la instancia de la clase ModelForecast.
 
 
 	// Actualizar el grafico.
 	this.setHTMLReport() ;
 	setLayer(this) ; 	
+
+	$("#positionInfo").show() ;
 
 }
 
@@ -221,6 +435,7 @@ function ModelForecast(obj, idx, readyCallb) {
 	this.readycallback = readyCallb ; 
 	this.zlevel = 0 ; 
 	this.baseURL = obj["forecasts"][idx].wmsurl ;
+	this.dapURL = obj["forecasts"][idx].dapurl ;
 	this.filled = false ; 
 
 	// Cargar metadatos para obtener los tiempos. 
@@ -228,12 +443,12 @@ function ModelForecast(obj, idx, readyCallb) {
 
  }
 
- ModelForecast.prototype.readDetails = function(json, caller) { 
+ ModelForecast.prototype.readDetails = function(json, caller) {  	
 	fullDates = json["datesWithData"] ; 
 	dates = [] ; 
 	for (var year in fullDates) {				
 		for (var month in fullDates[year]) { 					
-			for (var day in fullDates[year][month]) {
+			for (var day=0 ; day < fullDates[year][month].length ; day++) {
 				dates.push("" + fdig(parseInt(year)) + "-" + fdig(parseInt(month)+1) + "-" + fdig(parseInt(fullDates[year][month][day])) + "") ;					
 			}
 		}
@@ -299,6 +514,10 @@ function ModelForecast(obj, idx, readyCallb) {
  	return this.baseURL ; 
  }
 
+ ModelForecast.prototype.getDAPUrl = function() { 
+ 	return this.dapURL ; 
+ } 
+
  ModelForecast.prototype.getDates = function() { 
  	return this.dates ; 
  }
@@ -337,6 +556,16 @@ ModelForecast.prototype.getDidx = function() {
 
 ModelForecast.prototype.getTSidx = function() {
  	return this.ctimestep ; 
+}
+
+ModelForecast.prototype.getTimeDimSize = function() {
+	totalSteps = (this.dates.length * this.timesteps.length) - 1 ; 
+	return totalSteps ; 
+}
+
+ModelForecast.prototype.getCurrentDatetimeString = function() {
+	dtstring = (this.dates[this.getDidx()] + " T" + this.timesteps[this.getTSidx()])  ; 
+	return dtstring ;
 }
 
 ModelForecast.prototype.nextTimeStep = function(stepSize) {
@@ -391,7 +620,13 @@ ModelForecast.prototype.lastTimeStep = function(stepSize) {
 ModelForecast.prototype.changeVar = function(varName, zlev) {
 	zlev = typeof zlev !== 'undefined' ? zlev : this.zlevel ;
 	if (this.vars.indexOf(varName) != -1)  {
+		if (this.workingVar == varName) return 
 		this.workingVar = varName ; 
+		if (varName == "sea_water_velocity") {
+			WMSTileSize = 256 ; 
+		} else {
+			WMSTileSize = 128 ;
+		}
 		if (varName == "SSH") {
 			this.zlevel = 0 ; 
 		} else {
@@ -509,7 +744,7 @@ function setLayer(obj) {
  	customParams = [ 
 	 "LAYERS=" + obj.getCVar() ,
 	 "ELEVATION=-" + obj.getZ() , 
-	 "TIME="  + obj.getDates()[obj.getDidx()] ,
+	 "TIME="  + obj.getDates()[obj.getDidx()] + "T" + obj.getTimeSteps()[obj.getTSidx()] ,
 	 "COLORSCALERANGE=" + cmin + "," + cmax + "",
 	 "NUMCOLORBANDS=" + WMSColorbands + ""	 
 	] ;  
@@ -536,7 +771,7 @@ function getWMSColorbar(base, layer, level, cmin, cmax) {
 	 "COLORSCALERANGE=" + cmin + "," + cmax + ""
 	] ; 
  
-	console.log("Colormap WMS: " + base + customParams.join("&")) ;
+	//console.log("Colormap WMS: " + base + customParams.join("&")) ;
 	return base + customParams.join("&") ; 
 }
 
@@ -568,9 +803,9 @@ function getPointProfile(obj , location) {
 function setPointProfile(cmimgSrc , slabel , map) {
 
 	$("#pplotholder").empty() ; 
-	$("#pplotholder").append("<span id='pointinfo'>" + slabel + "</span>") ;
-	$("#pplotholder").append("<center><img id='loaderimg' src='loader.gif'><center>") ; 
-	$("#pplotholder").append('<img id="wmspp" src="' + cmimgSrc + '">') ; 
+	$("#pplotholder").append("<div class='panel-heading'><button id='pplotclose' type='button' class='close' aria-label='Close'><span aria-hidden='true'>&times;</span></button> <h3 class='panel-title'>" + slabel + "</h3> </div>") ;
+	$("#pplotholder").append("<center><div id='loaderimg' style='height:170px;'><img  src='loader.gif'></div></center>") ; 
+	$("#pplotholder").append('<center><img id="wmspp" src="' + cmimgSrc + '"></center>') ; 
 	$("#wmspp").hide() ; 	
 
 	// TODO show with an fade in animation
@@ -580,8 +815,14 @@ function setPointProfile(cmimgSrc , slabel , map) {
 		$("#loaderimg").hide() ; 
 		$("#wmspp").show() ; 
 	}) ;
+
+	$("#pplotclose").click(function() { 
+		$("#pplotholder").hide() ;
+		$("#pplotholder").empty() ; 
+	})
 	
 }
+
 
 function getTransect(obj, start, end) {
 	 baseURL = obj.getWMSUrl() + "?" ; 
@@ -618,6 +859,29 @@ function setSectionPlot(cmimgSrc , slabel , map) {
 		$("#wmstp").show() ; 
 	}) ;
 	
+}
+
+/* Metodo que inicia el contenedor div para la rosa de direcciones
+   Una vez cargado, se dibuja dentro del div la rosa.   
+*/
+function setDirectionRose(slabel, map , m,d ) { 
+
+	$("#dirplotholder").empty() ; 
+	$("#dirplotholder").append("<span id='sectioninfo'>" + slabel + "</span>") ;
+	$("#dirplotholder").append("<div id='directionRose' style='height:320px;width:320px;'></div>") ;
+	$("#dirplotholder").append("<center><img id='tloaderimg' src='loader.gif'><center>") ; 	
+	$("#directionRose").hide() ; 
+
+	// TODO show with a fade in animation
+	$("#dirplotholder").show() ; 
+
+	flotDirRose(m,d,"#directionRose") ; 
+
+	$("#tloaderimg").hide() ; 
+	$("#directionRose").show() ;
+	console.log('Direction rose ready') ;
+	
+
 }
 
 /* 
@@ -758,7 +1022,7 @@ function getfeatInfo(url , params, caller) {
 		$.ajax ({
 			type : "GET",
 			url : fullR ,	
-			dataType: "json",
+			dataType: "xml",
 			async : true , 			
 			success : function(data) { params.callback(data , caller) ;  }
 			}) ;  	
@@ -791,7 +1055,7 @@ function stringToDate(d) {
 
 // Get CSS value from style.css
 function findCSSProperty(selector, prop) {
-    rules = document.styleSheets[0].cssRules
+    rules = document.styleSheets[1].cssRules
     for(i in rules) {
         //if(rules[i].selectorText==selector) 
             //return rules[i].cssText; // Original
@@ -810,10 +1074,84 @@ if (!el || !el[0] || !el[0].firstChild) return null;
 return el[0].firstChild.nodeValue;
 }
 
+// Flatten or ravel a multidimensional array
+function flattenMArray(a, r){
+    if(!r){ r = []}
+    for(var i=0; i<a.length; i++){
+        if(a[i].constructor == Array){
+            flattenMArray(a[i], r);
+        }else{
+            r.push(a[i]);
+        }
+    }
+    return r;
+}
 
 
 
+/* Funciones para obtener datos de opendap , 
+   Generador de peticiones para opendap. 
+*/
 
+function sDodsUrlBuilder (baseURL, Variables, indexes) {
+    // baseUrl is our opendap Server,
+    // Variables is an array of strings or string with the variables names
+    // indexes is an array with the indexes to slice from the server, ej. [0:1:1000][0]
+    if (baseURL) {
+        baseURL = baseURL + '.dods' + '?' ;
+    }
+    vl = "" ;
+    if (typeof(indexes) == 'undefined') {
+        if (Variables.constructor === Array) {            
+            for (i = 0 ; i < Variables.length ; i++) {
+                vl = vl + Variables[i] + ( (i < Variables.length-1) ? "," : "");
+            }
+            retUrl = baseURL + vl ;
+        }
+        else {
+            retUrl = baseURL + Variables ;
+        }
+    } else {
+        // indexes come in array [start,end,step],[start,end], ..... 
+        // make it to [start:end:step][start:end][start]
+        sInd = "" ;
+        for (i=0 ; i<indexes.length ; i++) {
+            sDim = "" ; 
+            if (indexes[i].constructor === Array) {
+                sDim = "[" ; 
+                for (j=0 ; j<indexes[i].length ;j++) {
+                    sDim = sDim + indexes[i][j] + ((j < indexes[i].length-1) ? ":" : "") ;
+                }
+                sDim = sDim + "]" ;
+                sInd = sInd + sDim ; 
+            } else { 
+                if (i==0) {sInd = "[" ; }
+                sDim = sDim + indexes[i].toString() + ((i < indexes.length-1) ? ":" : "");
+                sInd = sInd + sDim  ; 
+                if (i==indexes.length-1) { sInd = sInd + "]"}
+            }            
+            
+        }        
+        if (Variables.constructor === Array) {            
+            for (i = 0 ; i < Variables.length ; i++) {
+                vl = vl + Variables[i] + sInd + ( (i < Variables.length-1) ? "," : "");
+            }
+            retUrl = baseURL + vl ;
+        }
+        else {
+            retUrl = baseURL + Variables + sInd;
+        }       
+    }
+    //myLogger(retUrl) ;
+    return retUrl ;    
+}
 
+function getDapData(dapURL, callback) { 
 
+	if (workingRemote) {
+		// Use proxy when working remotely
+		dapURL = "http://localhost/miniProxy.php/" + dapURL ;	
+	} 
+	loadData( dapURL , callback ) ; 
 
+}

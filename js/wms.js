@@ -113,7 +113,7 @@ function loadWMSOverlay(map, baseURL, customParams, wmsTileS){
         // TODO Remover el overlay anterior hasta que se haya cargado la nueva.
         // Por lo pronto solo dejar un pasar unos instantes para eliminar el overlay anterior
         // y evitar el flasheo de los frames.
-        setTimeout( function() { map.overlayMapTypes.removeAt(0); } , 300 ) ;
+        setTimeout( function() { map.overlayMapTypes.removeAt(0); } , 3000 ) ;
 
     }
     
